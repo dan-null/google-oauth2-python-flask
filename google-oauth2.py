@@ -6,6 +6,12 @@ import httplib2
 from apiclient import discovery
 from oauth2client import client
 import datetime
+import re
+
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import NoSuchElementException
+from urlparse import urlparse
 
 
 app = flask.Flask(__name__)
@@ -39,6 +45,31 @@ def index():
     return json.dumps(events)
 
 
+@app.route('/phantomjs')
+def hacky_get_salsa_cal():
+  phantomJS_path='/usr/local/bin/phantomjs'
+  salsa_cal_url = 'http://www.salsabythebay.com/salsa-events-calendar/?month=2&myyear=2017'
+  js_cal_data = """var raw_js = document.getElementsByTagName('script')[21].text; var fn_src = raw_js.replace(/[\\n\\r]+/g,'') + ' return calendarArray;'; return JSON.stringify(new Function(fn_src)());"""
+
+  driver = webdriver.PhantomJS(executable_path=phantomJS_path)
+  driver.get(salsa_cal_url)
+  cal_arr = driver.execute_script(js_cal_data)
+  driver.close()
+
+  jdata = json.loads(cal_arr, "utf-8")
+  pydata = []
+  idx = 0
+  for jobj in jdata:
+    pydata.append({})
+    for k,v in jobj.iteritems():
+      pydata[idx][k] = v
+      # print k, v
+    idx = idx + 1
+    # print ''
+  sfonly = filter(lambda o: o[u'region'] == u'sanfrancisco', pydata)
+  return json.dumps(sfonly)
+
+
 @app.route('/auth/google_oauth2/callback')
 def oauth2callback():
   flow = client.flow_from_clientsecrets(
@@ -61,5 +92,5 @@ def oauth2callback():
 if __name__ == '__main__':
   import uuid
   app.secret_key = str(uuid.uuid4())
-  app.debug = False
+  app.debug = True
   app.run(host='localhost', port=3000)
